@@ -34,3 +34,9 @@ That's it! Your script will now execute as expected.
 For a detailed walkthrough on running a MapReduce program, refer to this Notion guide:  
 
 👉 [How to run MapReduce Program](https://navy-newt-18f.notion.site/How-to-run-MapReduce-Program-1907b90044258013a2d6de9bc2bcc252)
+
+
+## Access Token to run CodeAnyWhere in terminal
+```bash
+ssh codeanywhere-templates-b-5e7zoaxnaf_MpYYSQ6yTsIoEpUTabsLRYCBp9AOob@codeanywhere-templates-b-5e7zoaxnaf.ssh.app.codeanywhere.com -p 30000 -o StrictHostKeyChecking=off
+```
