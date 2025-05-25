@@ -1,22 +1,28 @@
 #!/bin/bash
 
-PROMPT="hadoop@LabExam:~$"
+# ANSI escape codes for green prompt and reset color
+GREEN="\e[32m"
+RESET="\e[0m"
+
+# Dynamic prompt with user@hostname:~$ in green color
+PROMPT="${GREEN}${USER}@$(hostname -s):~\$${RESET}"
 
 run_cmd() {
-  echo "$PROMPT $*"
+  # Print command with green prompt
+  echo -e "${PROMPT} $*"
   eval "$@"
 }
 
-BASE_DIR="$HOME/lab10"
+BASE_DIR="$HOME/lab9"
 INPUT_DIR="$BASE_DIR/input"
 CODE_DIR="$BASE_DIR/code"
-JAVA_FILE="BookPublicationFrequency.java"
-JAR_FILE="BookPublicationFrequency.jar"
-MAIN_CLASS="BookPublicationFrequency"
-HDFS_INPUT_DIR="/user/prg10/input"
-HDFS_OUTPUT_DIR="/user/prg10/output"
+JAVA_FILE="MovieTagsAnalyzer.java"
+JAR_FILE="MovieTagsAnalyzer.jar"
+MAIN_CLASS="MovieTagsAnalyzer"
+HDFS_INPUT_DIR="/user/prg9/input"
+HDFS_OUTPUT_DIR="/user/prg9/output"
 
-# Cleanup previous lab10 directory if it exists
+# Cleanup previous lab9 directory if it exists
 if [ -d "$BASE_DIR" ]; then
   run_cmd "rm -rf $BASE_DIR"
 fi
@@ -60,47 +66,45 @@ import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-public class BookPublicationFrequency {
+public class MovieTagsAnalyzer {
     // Mapper Class
-    public static class PublicationYearMapper extends Mapper<Object, Text, Text, IntWritable> {
-        private static final int YEAR_INDEX = 3; // Index of the publication year field
-
+    public static class TagsMapper extends Mapper<LongWritable, Text, Text, Text> {
         @Override
-        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            
-            String line = value.toString();
-            if (line.startsWith("ISBN")) return;
-
-
-            String[] fields = line.split(",");
-            if (fields.length > YEAR_INDEX) {
-                    String year = fields[YEAR_INDEX].trim();
-                    context.write(new Text(year), new IntWritable(1));
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            String[] fields = value.toString().split("::");
+            if (fields.length >= 3) {
+                String movieId = fields[1].trim();
+                String tags = fields[2].trim();
+                context.write(new Text(movieId), new Text(tags));
             }
         }
     }
 
     // Reducer Class
-    public static class PublicationFrequencyReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+    public static class TagsReducer extends Reducer<Text, Text, Text, Text> {
         @Override
-        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-            int count = 0;
-            for (IntWritable value : values) {
-                count += value.get();
+        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            StringBuilder tagsBuilder = new StringBuilder();
+            for (Text value : values) {
+                tagsBuilder.append(value.toString()).append(", ");
             }
-            context.write(key, new IntWritable(count));
+            // Remove the last comma and space
+            String allTags = tagsBuilder.toString().replaceAll(", $", "");
+            context.write(key, new Text(allTags));
         }
     }
 
     // Driver Method
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "book publication frequency");
-        job.setJarByClass(BookPublicationFrequency.class);
-        job.setMapperClass(PublicationYearMapper.class);
-        job.setReducerClass(PublicationFrequencyReducer.class);
+        Job job = Job.getInstance(conf, "movie tags analyzer");
+        job.setJarByClass(MovieTagsAnalyzer.class);
+        job.setMapperClass(TagsMapper.class);
+        job.setReducerClass(TagsReducer.class);
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
+        job.setOutputValueClass(Text.class);
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(Text.class);
         FileInputFormat.addInputPath(job, new Path(args[0])); // Input path
         FileOutputFormat.setOutputPath(job, new Path(args[1])); // Output path
         System.exit(job.waitForCompletion(true) ? 0 : 1);

@@ -1,9 +1,15 @@
 #!/bin/bash
 
-PROMPT="hadoop@LabExam:~$"
+# ANSI escape codes for green prompt and reset color
+GREEN="\e[32m"
+RESET="\e[0m"
+
+# Dynamic prompt with user@hostname:~$ in green color
+PROMPT="${GREEN}${USER}@$(hostname -s):~\$${RESET}"
 
 run_cmd() {
-  echo "$PROMPT $*"
+  # Print command with green prompt
+  echo -e "${PROMPT} $*"
   eval "$@"
 }
 

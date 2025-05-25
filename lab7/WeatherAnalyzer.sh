@@ -1,22 +1,28 @@
 #!/bin/bash
 
-PROMPT="hadoop@LabExam:~$"
+# ANSI escape codes for green prompt and reset color
+GREEN="\e[32m"
+RESET="\e[0m"
+
+# Dynamic prompt with user@hostname:~$ in green color
+PROMPT="${GREEN}${USER}@$(hostname -s):~\$${RESET}"
 
 run_cmd() {
-  echo "$PROMPT $*"
+  # Print command with green prompt
+  echo -e "${PROMPT} $*"
   eval "$@"
 }
 
-BASE_DIR="$HOME/lab6"
+BASE_DIR="$HOME/lab7"
 INPUT_DIR="$BASE_DIR/input"
 CODE_DIR="$BASE_DIR/code"
-JAVA_FILE="MaxElectricityConsumption.java"
-JAR_FILE="MaxElectricityConsumption.jar"
-MAIN_CLASS="MaxElectricityConsumption"
-HDFS_INPUT_DIR="/user/prg6/input"
-HDFS_OUTPUT_DIR="/user/prg6/output"
+JAVA_FILE="WeatherAnalyzer.java"
+JAR_FILE="WeatherAnalyzer.jar"
+MAIN_CLASS="WeatherAnalyzer"
+HDFS_INPUT_DIR="/user/prg7/input"
+HDFS_OUTPUT_DIR="/user/prg7/output"
 
-# Cleanup previous lab6 directory if it exists
+# Cleanup previous lab7 directory if it exists
 if [ -d "$BASE_DIR" ]; then
   run_cmd "rm -rf $BASE_DIR"
 fi
@@ -52,71 +58,64 @@ done
 if [ ! -f "$CODE_DIR/$JAVA_FILE" ]; then
   echo "$PROMPT cat > $CODE_DIR/$JAVA_FILE << 'EOF'"
   cat > "$CODE_DIR/$JAVA_FILE" << 'EOF'
+import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import java.io.IOException;
 
-public class MaxElectricityConsumption {
+public class WeatherAnalyzer {
 
     // Mapper Class
-    public static class MaxElectricityMapper extends Mapper<Object, Text, Text, IntWritable> {
-        private Text year = new Text();
-
+    public static class WeatherMapper extends Mapper<Object, Text, Text, Text> {
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String line = value.toString().trim();
-            String[] parts = line.split("\\s+"); // Split by spaces or tabs
+            if (line.isEmpty()) {
+                return;
+            }
+            String[] parts = line.split("\\s+");
 
-            // Skip the header row
-            if (parts[0].equalsIgnoreCase("year")) {
+            // Skip header row or invalid lines
+            if (parts.length < 2 || parts[0].equalsIgnoreCase("Date")) {
                 return;
             }
 
             try {
-                year.set(parts[0]); // Extract year
-                int maxConsumption = Integer.MIN_VALUE;
-
-                // Iterate over monthly values (ignoring the last column "Average")
-                for (int i = 1; i < parts.length - 1; i++) {
-                    int consumption = Integer.parseInt(parts[i]);
-                    maxConsumption = Math.max(maxConsumption, consumption);
-                }
-
-                context.write(year, new IntWritable(maxConsumption));
+                String date = parts[0];              // Extract date
+                int maxTemp = Integer.parseInt(parts[1]); // Extract max temp
+                String weatherType = (maxTemp >= 30) ? "Shiny" : "Cool"; // Classification
+                context.write(new Text(date), new Text(weatherType));
             } catch (NumberFormatException e) {
-                // Ignore lines with invalid numbers
+                // Skip malformed temperature values
             }
         }
     }
 
     // Reducer Class
-    public static class MaxElectricityReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
-        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-            int maxConsumption = Integer.MIN_VALUE;
-            for (IntWritable val : values) {
-                maxConsumption = Math.max(maxConsumption, val.get());
+    public static class WeatherReducer extends Reducer<Text, Text, Text, Text> {
+        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            for (Text value : values) {
+                context.write(key, value);
             }
-            context.write(key, new IntWritable(maxConsumption));
         }
     }
 
-    // Driver Class (Main Method)
+    // Driver Method
     public static void main(String[] args) throws Exception {
+
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Max Electricity Consumption");
+        Job job = Job.getInstance(conf, "Weather Analysis");
 
-        job.setJarByClass(MaxElectricityConsumption.class);
-        job.setMapperClass(MaxElectricityMapper.class);
-        job.setReducerClass(MaxElectricityReducer.class);
-
+        job.setJarByClass(WeatherAnalyzer.class);
+        job.setMapperClass(WeatherMapper.class);
+        job.setReducerClass(WeatherReducer.class);
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
+        job.setOutputValueClass(Text.class);
 
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));

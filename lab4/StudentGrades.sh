@@ -1,22 +1,28 @@
 #!/bin/bash
 
-PROMPT="hadoop@LabExam:~$"
+# ANSI escape codes for green prompt and reset color
+GREEN="\e[32m"
+RESET="\e[0m"
+
+# Dynamic prompt with user@hostname:~$ in green color
+PROMPT="${GREEN}${USER}@$(hostname -s):~\$${RESET}"
 
 run_cmd() {
-  echo "$PROMPT $*"
+  # Print command with green prompt
+  echo -e "${PROMPT} $*"
   eval "$@"
 }
 
-BASE_DIR="$HOME/lab9"
+BASE_DIR="$HOME/lab4"
 INPUT_DIR="$BASE_DIR/input"
 CODE_DIR="$BASE_DIR/code"
-JAVA_FILE="MovieTagsAnalyzer.java"
-JAR_FILE="MovieTagsAnalyzer.jar"
-MAIN_CLASS="MovieTagsAnalyzer"
-HDFS_INPUT_DIR="/user/prg9/input"
-HDFS_OUTPUT_DIR="/user/prg9/output"
+JAVA_FILE="StudentGrades.java"
+JAR_FILE="StudentGrades.jar"
+MAIN_CLASS="StudentGrades"
+HDFS_INPUT_DIR="/user/prg4/input"
+HDFS_OUTPUT_DIR="/user/prg4/output"
 
-# Cleanup previous lab9 directory if it exists
+# Cleanup previous lab4 directory if it exists
 if [ -d "$BASE_DIR" ]; then
   run_cmd "rm -rf $BASE_DIR"
 fi
@@ -57,50 +63,76 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-public class MovieTagsAnalyzer {
-    // Mapper Class
-    public static class TagsMapper extends Mapper<LongWritable, Text, Text, Text> {
+public class StudentGrades {
+
+    // Mapper class
+    public static class GradeMapper extends Mapper<LongWritable, Text, Text, Text> {
         @Override
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields = value.toString().split("::");
-            if (fields.length >= 3) {
-                String movieId = fields[1].trim();
-                String tags = fields[2].trim();
-                context.write(new Text(movieId), new Text(tags));
+            String[] tokens = value.toString().split(",");
+
+            // Assuming the input format is: student_name,subject,marks
+            if (tokens.length == 3) {
+                String studentName = tokens[0];
+                String subject = tokens[1];
+                int marks = Integer.parseInt(tokens[2]);
+                String grade = calculateGrade(marks); // Calculate grade based on marks
+                context.write(new Text(studentName), new Text(subject + ":" + grade));
+            }
+        }
+
+        // Method to calculate grade based on marks
+        private String calculateGrade(int marks) {
+            if (marks >= 90) {
+                return "A";
+            } else if (marks >= 80) {
+                return "B";
+            } else if (marks >= 70) {
+                return "C";
+            } else if (marks >= 60) {
+                return "D";
+            } else {
+                return "F";
             }
         }
     }
 
-    // Reducer Class
-    public static class TagsReducer extends Reducer<Text, Text, Text, Text> {
+    // Reducer class
+    public static class GradeReducer extends Reducer<Text, Text, Text, Text> {
         @Override
         public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            StringBuilder tagsBuilder = new StringBuilder();
+            StringBuilder result = new StringBuilder();
             for (Text value : values) {
-                tagsBuilder.append(value.toString()).append(", ");
+                result.append(value.toString()).append(", ");
             }
-            // Remove the last comma and space
-            String allTags = tagsBuilder.toString().replaceAll(", $", "");
-            context.write(key, new Text(allTags));
+            // Remove the trailing comma and space
+            if (result.length() > 0) {
+                result.setLength(result.length() - 2);
+            }
+            context.write(key, new Text(result.toString()));
         }
     }
 
-    // Driver Method
+    // Driver method
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "movie tags analyzer");
-        job.setJarByClass(MovieTagsAnalyzer.class);
-        job.setMapperClass(TagsMapper.class);
-        job.setReducerClass(TagsReducer.class);
+        Job job = Job.getInstance(conf, "student grades");
+        job.setJarByClass(StudentGrades.class);
+        job.setMapperClass(GradeMapper.class);
+        job.setReducerClass(GradeReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
         job.setMapOutputKeyClass(Text.class);
         job.setMapOutputValueClass(Text.class);
-        FileInputFormat.addInputPath(job, new Path(args[0])); // Input path
-        FileOutputFormat.setOutputPath(job, new Path(args[1])); // Output path
+        job.setInputFormatClass(TextInputFormat.class);
+        job.setOutputFormatClass(TextOutputFormat.class);
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }

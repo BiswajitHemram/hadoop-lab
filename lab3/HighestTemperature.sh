@@ -1,22 +1,28 @@
 #!/bin/bash
 
-PROMPT="hadoop@LabExam:~$"
+# ANSI escape codes for green prompt and reset color
+GREEN="\e[32m"
+RESET="\e[0m"
+
+# Dynamic prompt with user@hostname:~$ in green color
+PROMPT="${GREEN}${USER}@$(hostname -s):~\$${RESET}"
 
 run_cmd() {
-  echo "$PROMPT $*"
+  # Print command with green prompt
+  echo -e "${PROMPT} $*"
   eval "$@"
 }
 
-BASE_DIR="$HOME/lab11"
+BASE_DIR="$HOME/lab3"
 INPUT_DIR="$BASE_DIR/input"
 CODE_DIR="$BASE_DIR/code"
-JAVA_FILE="UberTripAnalyzer.java"
-JAR_FILE="UberTripAnalyzer.jar"
-MAIN_CLASS="UberTripAnalyzer"
-HDFS_INPUT_DIR="/user/prg11/input"
-HDFS_OUTPUT_DIR="/user/prg11/output"
+JAVA_FILE="HighestTemperature.java"
+JAR_FILE="HighestTemperature.jar"
+MAIN_CLASS="HighestTemperature"
+HDFS_INPUT_DIR="/user/prg3/input"
+HDFS_OUTPUT_DIR="/user/prg3/output"
 
-# Cleanup previous lab11 directory if it exists
+# Cleanup previous lab4 directory if it exists
 if [ -d "$BASE_DIR" ]; then
   run_cmd "rm -rf $BASE_DIR"
 fi
@@ -55,76 +61,74 @@ if [ ! -f "$CODE_DIR/$JAVA_FILE" ]; then
 import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.*;
-import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 
-public class UberTripAnalyzer {
+public class HighestTemperature {
 
-    // Mapper
-    public static class TripMapper extends Mapper<LongWritable, Text, Text, Text> {
+    // Mapper class
+    public static class HighestMapper extends Mapper<Object, Text, Text, IntWritable> {
         @Override
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String line = value.toString();
+        protected void map(Object key, Text value, Context context)
+                throws IOException, InterruptedException {
+            String line = value.toString().trim();
+            String[] parts = line.split("\\s+");  // Assuming space-separated input
 
-            // Skip header
-            if (line.startsWith("dispatching_base_number")) return;
-
-            String[] fields = line.split(",");
-            if (fields.length >= 4) {
-                String basement = fields[0].trim();
-                String date = fields[1].trim();
-                String trips = fields[3].trim();
-                context.write(new Text(date), new Text(basement + "," + trips));
+            if (parts.length == 2) {
+                String year = parts[0];
+                try {
+                    int temperature = Integer.parseInt(parts[1]);
+                    context.write(new Text(year), new IntWritable(temperature));
+                } catch (NumberFormatException e) {
+                    System.err.println("Skipping invalid temperature value: " + parts[1]);
+                }
+            } else {
+                System.err.println("Skipping malformed line: " + line);
             }
         }
     }
 
-    // Reducer
-    public static class TripReducer extends Reducer<Text, Text, Text, Text> {
+    // Reducer class
+    public static class HighestReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
         @Override
-        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            int maxTrips = Integer.MIN_VALUE;
-            String maxBasement = "";
+        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
 
-            for (Text val : values) {
-                String[] parts = val.toString().split(",");
-                String basement = parts[0];
-                int trips = Integer.parseInt(parts[1]);
+            int maxTemp = Integer.MIN_VALUE;
 
-                if (trips > maxTrips) {
-                    maxTrips = trips;
-                    maxBasement = basement;
-                }
+            for (IntWritable val : values) {
+                maxTemp = Math.max(maxTemp, val.get());
             }
-            context.write(key, new Text(maxBasement + "\t" + maxTrips));
+
+            context.write(key, new IntWritable(maxTemp));
         }
     }
 
     // Driver
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "uber trip analyzer");
+        Job job = Job.getInstance(conf, "Highest Temperature Per Year");
 
-        job.setJarByClass(UberTripAnalyzer.class);
-        job.setMapperClass(TripMapper.class);
-        job.setReducerClass(TripReducer.class);
+        job.setJarByClass(HighestTemperature.class);
+        job.setMapperClass(HighestMapper.class);
+        job.setReducerClass(HighestReducer.class);
 
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
         job.setMapOutputKeyClass(Text.class);
-        job.setMapOutputValueClass(Text.class);
-
-        job.setInputFormatClass(TextInputFormat.class);
-        job.setOutputFormatClass(TextOutputFormat.class);
+        job.setMapOutputValueClass(IntWritable.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
 
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
+        boolean success = job.waitForCompletion(true);
+        System.exit(success ? 0 : 1);
     }
 }
 EOF

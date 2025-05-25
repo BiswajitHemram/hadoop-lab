@@ -1,9 +1,15 @@
 #!/bin/bash
 
-PROMPT="hadoop@LabExam:~$"
+# ANSI escape codes for green prompt and reset color
+GREEN="\e[32m"
+RESET="\e[0m"
+
+# Dynamic prompt with user@hostname:~$ in green color
+PROMPT="${GREEN}${USER}@$(hostname -s):~\$${RESET}"
 
 run_cmd() {
-  echo "$PROMPT $*"
+  # Print command with green prompt
+  echo -e "${PROMPT} $*"
   eval "$@"
 }
 
@@ -15,6 +21,7 @@ JAR_FILE="WordCount.jar"
 MAIN_CLASS="WordCount"
 HDFS_INPUT_DIR="/user/prg2/input"
 HDFS_OUTPUT_DIR="/user/prg2/output"
+
 
 # Cleanup previous lab4 directory if it exists
 if [ -d "$BASE_DIR" ]; then

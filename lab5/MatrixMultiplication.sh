@@ -1,22 +1,28 @@
 #!/bin/bash
 
-PROMPT="hadoop@LabExam:~$"
+# ANSI escape codes for green prompt and reset color
+GREEN="\e[32m"
+RESET="\e[0m"
+
+# Dynamic prompt with user@hostname:~$ in green color
+PROMPT="${GREEN}${USER}@$(hostname -s):~\$${RESET}"
 
 run_cmd() {
-  echo "$PROMPT $*"
+  # Print command with green prompt
+  echo -e "${PROMPT} $*"
   eval "$@"
 }
 
-BASE_DIR="$HOME/lab4"
+BASE_DIR="$HOME/lab5"
 INPUT_DIR="$BASE_DIR/input"
 CODE_DIR="$BASE_DIR/code"
-JAVA_FILE="StudentGrades.java"
-JAR_FILE="StudentGrades.jar"
-MAIN_CLASS="StudentGrades"
-HDFS_INPUT_DIR="/user/prg4/input"
-HDFS_OUTPUT_DIR="/user/prg4/output"
+JAVA_FILE="MatrixMultiplication.java"
+JAR_FILE="MatrixMultiplication.jar"
+MAIN_CLASS="MatrixMultiplication"
+HDFS_INPUT_DIR="/user/prg5/input"
+HDFS_OUTPUT_DIR="/user/prg5/output"
 
-# Cleanup previous lab4 directory if it exists
+# Cleanup previous lab5 directory if it exists
 if [ -d "$BASE_DIR" ]; then
   run_cmd "rm -rf $BASE_DIR"
 fi
@@ -62,71 +68,90 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-public class StudentGrades {
+public class MatrixMultiplication {
 
     // Mapper class
-    public static class GradeMapper extends Mapper<LongWritable, Text, Text, Text> {
+    public static class MatrixMapper extends Mapper<Object, Text, Text, Text> {
         @Override
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String[] tokens = value.toString().split(",");
+            if (tokens.length < 4) return;  // Ignore malformed lines
 
-            // Assuming the input format is: student_name,subject,marks
-            if (tokens.length == 3) {
-                String studentName = tokens[0];
-                String subject = tokens[1];
-                int marks = Integer.parseInt(tokens[2]);
-                String grade = calculateGrade(marks); // Calculate grade based on marks
-                context.write(new Text(studentName), new Text(subject + ":" + grade));
-            }
-        }
-
-        // Method to calculate grade based on marks
-        private String calculateGrade(int marks) {
-            if (marks >= 90) {
-                return "A";
-            } else if (marks >= 80) {
-                return "B";
-            } else if (marks >= 70) {
-                return "C";
-            } else if (marks >= 60) {
-                return "D";
-            } else {
-                return "F";
+            String matrixName = tokens[0];
+            int row = Integer.parseInt(tokens[1]);
+            int col = Integer.parseInt(tokens[2]);
+            int val = Integer.parseInt(tokens[3]);
+            
+            int matrixK = 2;
+            
+            if (matrixName.equals("A")) {
+                // Emit row-wise elements of A
+                for (int k = 0; k < matrixK; k++) {
+                    context.write(new Text(row + "," + k), new Text("A," + col + "," + val));
+                }
+            } else if (matrixName.equals("B")) {
+                // Emit column-wise elements of B
+                for (int i = 0; i < matrixK; i++) {
+                    context.write(new Text(i + "," + col), new Text("B," + row + "," + val));
+                }
             }
         }
     }
 
     // Reducer class
-    public static class GradeReducer extends Reducer<Text, Text, Text, Text> {
+    public static class MultiplicationReducer extends Reducer<Text, Text, Text, IntWritable> {
         @Override
         public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            StringBuilder result = new StringBuilder();
+            int matrixK = 2;
+            int[] vectorA = new int[matrixK];
+            int[] vectorB = new int[matrixK];
+
+            // Populate the vectors
             for (Text value : values) {
-                result.append(value.toString()).append(", ");
+                String[] tokens = value.toString().split(",");
+                String matrixName = tokens[0];
+                int index = Integer.parseInt(tokens[1]);
+                int val = Integer.parseInt(tokens[2]);
+
+                if (matrixName.equals("A")) {
+                    vectorA[index] = val;
+                } else if (matrixName.equals("B")) {
+                    vectorB[index] = val;
+                }
             }
-            // Remove the trailing comma and space
-            if (result.length() > 0) {
-                result.setLength(result.length() - 2);
+
+            // Compute dot product
+            int result = 0;
+            for (int i = 0; i < matrixK; i++) {
+                result += vectorA[i] * vectorB[i];
             }
-            context.write(key, new Text(result.toString()));
+
+            // Output result (row, col) -> value
+            context.write(key, new IntWritable(result));
         }
     }
 
     // Driver method
     public static void main(String[] args) throws Exception {
+
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "student grades");
-        job.setJarByClass(StudentGrades.class);
-        job.setMapperClass(GradeMapper.class);
-        job.setReducerClass(GradeReducer.class);
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
+        Job job = Job.getInstance(conf, "matrix multiplication");
+        job.setJarByClass(MatrixMultiplication.class);
+
+        job.setMapperClass(MatrixMapper.class);
+        job.setReducerClass(MultiplicationReducer.class);
+
         job.setMapOutputKeyClass(Text.class);
         job.setMapOutputValueClass(Text.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+
         job.setInputFormatClass(TextInputFormat.class);
         job.setOutputFormatClass(TextOutputFormat.class);
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        FileInputFormat.addInputPath(job, new Path(args[0])); // Input
+        FileOutputFormat.setOutputPath(job, new Path(args[1])); // Output
+
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }

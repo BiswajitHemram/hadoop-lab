@@ -1,22 +1,28 @@
 #!/bin/bash
 
-PROMPT="hadoop@LabExam:~$"
+# ANSI escape codes for green prompt and reset color
+GREEN="\e[32m"
+RESET="\e[0m"
+
+# Dynamic prompt with user@hostname:~$ in green color
+PROMPT="${GREEN}${USER}@$(hostname -s):~\$${RESET}"
 
 run_cmd() {
-  echo "$PROMPT $*"
+  # Print command with green prompt
+  echo -e "${PROMPT} $*"
   eval "$@"
 }
 
-BASE_DIR="$HOME/lab3"
+BASE_DIR="$HOME/lab10"
 INPUT_DIR="$BASE_DIR/input"
 CODE_DIR="$BASE_DIR/code"
-JAVA_FILE="HighestTemperature.java"
-JAR_FILE="HighestTemperature.jar"
-MAIN_CLASS="HighestTemperature"
-HDFS_INPUT_DIR="/user/prg3/input"
-HDFS_OUTPUT_DIR="/user/prg3/output"
+JAVA_FILE="BookPublicationFrequency.java"
+JAR_FILE="BookPublicationFrequency.jar"
+MAIN_CLASS="BookPublicationFrequency"
+HDFS_INPUT_DIR="/user/prg10/input"
+HDFS_OUTPUT_DIR="/user/prg10/output"
 
-# Cleanup previous lab4 directory if it exists
+# Cleanup previous lab10 directory if it exists
 if [ -d "$BASE_DIR" ]; then
   run_cmd "rm -rf $BASE_DIR"
 fi
@@ -55,74 +61,55 @@ if [ ! -f "$CODE_DIR/$JAVA_FILE" ]; then
 import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.io.*;
+import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-public class HighestTemperature {
+public class BookPublicationFrequency {
+    // Mapper Class
+    public static class PublicationYearMapper extends Mapper<Object, Text, Text, IntWritable> {
+        private static final int YEAR_INDEX = 3; // Index of the publication year field
 
-    // Mapper class
-    public static class HighestMapper extends Mapper<Object, Text, Text, IntWritable> {
         @Override
-        protected void map(Object key, Text value, Context context)
-                throws IOException, InterruptedException {
-            String line = value.toString().trim();
-            String[] parts = line.split("\\s+");  // Assuming space-separated input
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            
+            String line = value.toString();
+            if (line.startsWith("ISBN")) return;
 
-            if (parts.length == 2) {
-                String year = parts[0];
-                try {
-                    int temperature = Integer.parseInt(parts[1]);
-                    context.write(new Text(year), new IntWritable(temperature));
-                } catch (NumberFormatException e) {
-                    System.err.println("Skipping invalid temperature value: " + parts[1]);
-                }
-            } else {
-                System.err.println("Skipping malformed line: " + line);
+
+            String[] fields = line.split(",");
+            if (fields.length > YEAR_INDEX) {
+                    String year = fields[YEAR_INDEX].trim();
+                    context.write(new Text(year), new IntWritable(1));
             }
         }
     }
 
-    // Reducer class
-    public static class HighestReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+    // Reducer Class
+    public static class PublicationFrequencyReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
         @Override
-        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
-                throws IOException, InterruptedException {
-
-            int maxTemp = Integer.MIN_VALUE;
-
-            for (IntWritable val : values) {
-                maxTemp = Math.max(maxTemp, val.get());
+        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
+            int count = 0;
+            for (IntWritable value : values) {
+                count += value.get();
             }
-
-            context.write(key, new IntWritable(maxTemp));
+            context.write(key, new IntWritable(count));
         }
     }
 
-    // Driver
+    // Driver Method
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Highest Temperature Per Year");
-
-        job.setJarByClass(HighestTemperature.class);
-        job.setMapperClass(HighestMapper.class);
-        job.setReducerClass(HighestReducer.class);
-
-        job.setMapOutputKeyClass(Text.class);
-        job.setMapOutputValueClass(IntWritable.class);
+        Job job = Job.getInstance(conf, "book publication frequency");
+        job.setJarByClass(BookPublicationFrequency.class);
+        job.setMapperClass(PublicationYearMapper.class);
+        job.setReducerClass(PublicationFrequencyReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
-
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
-
-        boolean success = job.waitForCompletion(true);
-        System.exit(success ? 0 : 1);
+        FileInputFormat.addInputPath(job, new Path(args[0])); // Input path
+        FileOutputFormat.setOutputPath(job, new Path(args[1])); // Output path
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }
 EOF
