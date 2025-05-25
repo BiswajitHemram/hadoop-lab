@@ -21,6 +21,7 @@ JAR_FILE="BookPublicationFrequency.jar"
 MAIN_CLASS="BookPublicationFrequency"
 HDFS_INPUT_DIR="/user/prg10/input"
 HDFS_OUTPUT_DIR="/user/prg10/output"
+DEFAULT_INPUT="https://raw.githubusercontent.com/BiswajitHemram/hadoop-lab/refs/heads/main/lab10/Books-mini.csv"
 
 # Cleanup previous lab10 directory if it exists
 if [ -d "$BASE_DIR" ]; then
@@ -32,11 +33,11 @@ run_cmd "mkdir -p $INPUT_DIR $CODE_DIR"
 
 # Ask user for input file (local path or URL)
 while true; do
-  echo -n "$PROMPT read -rp \"Input file full path or URL: \" INPUT_PATH"
+  echo -ne "$PROMPT read -rp \"Input file full path or URL: \" INPUT_PATH\n"
   read -rp "Input file full path or URL: " INPUT_PATH
+  INPUT_PATH="${INPUT_PATH:-$DEFAULT_INPUT}"  # Use default if empty
 
   if [[ "$INPUT_PATH" =~ ^https?:// ]]; then
-    # Handle URL input
     INPUT_FILE=$(basename "$INPUT_PATH")
     run_cmd "wget -O \"$INPUT_DIR/$INPUT_FILE\" \"$INPUT_PATH\""
     if [ -f "$INPUT_DIR/$INPUT_FILE" ]; then
@@ -45,7 +46,6 @@ while true; do
       echo "Download failed. Please try again."
     fi
   elif [ -f "$INPUT_PATH" ]; then
-    # Handle local file input
     INPUT_FILE=$(basename "$INPUT_PATH")
     run_cmd "cp \"$INPUT_PATH\" \"$INPUT_DIR/$INPUT_FILE\""
     break
@@ -53,6 +53,7 @@ while true; do
     echo "File not found or invalid URL. Please try again."
   fi
 done
+
 
 # Create Java source file if not exists
 if [ ! -f "$CODE_DIR/$JAVA_FILE" ]; then
