@@ -38,5 +38,10 @@ For a detailed walkthrough on running a MapReduce program, refer to this Notion 
 
 ## Access Token to run CodeAnyWhere in terminal
 ```bash
-ssh codeanywhere-templates-b-5e7zoaxnaf_MpYYSQ6yTsIoEpUTabsLRYCBp9AOob@codeanywhere-templates-b-5e7zoaxnaf.ssh.app.codeanywhere.com -p 30000 -o StrictHostKeyChecking=off
+ssh codeanywhere-templates-b-58w0hpv6ob_tbDiWhBccCC2P0EXBtSnhxf3mhIgsE@codeanywhere-templates-b-58w0hpv6ob.ssh.app.codeanywhere.com -p 30000 -o StrictHostKeyChecking=off
+```
+
+## VM IP ADDRESS
+```bash
+4.213.58.23
 ```
